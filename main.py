@@ -5,13 +5,45 @@ from core.book import Book
 def main():
     db = Database()
 
-    # Шлях до тестового TXT файлу
     book = Book("test.txt", db)
     book.load()
 
-    print(f"Назва: {book.title}")
-    print(f"Перші 500 символів:")
-    print(book.content[:500])
+    print(f"📖 {book.title}")
+    if book.text_processor.chapters:  # type: ignore
+        print(f"📑 Знайдено розділів: {len(book.text_processor.chapters)}") # type: ignore
+
+    page_size = book.get_auto_page_size()
+    print(f"📏 Розмір сторінки: {page_size} символів")
+    print("="*50)
+
+    while True:
+        # Отримуємо сторінку
+        page = book.get_page()
+
+        # Розраховуємо номер сторінки
+        current_page, total_pages = book.calculate_page_number()
+
+        print(f"\n{'='*50}")
+        print(f"Сторінка {current_page} з {total_pages}")
+        print(f"{'='*50}\n")
+
+        print(page['text'])
+
+        if page['is_last_page']:
+            print("\n📖 Кінець книги!")
+            break
+
+        print(f"\n{'─'*50}")
+        print("[Enter] - далі | [p] - назад | [q] - вихід")
+        choice = input(">>> ").lower()
+
+        if choice == 'q':
+            print("💾 Позицію збережено. До побачення!")
+            break
+        elif choice == 'p':
+            book.prev_page()
+        else:
+            book.next_page()
 
 
 if __name__ == "__main__":

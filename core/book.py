@@ -1,6 +1,8 @@
+import os
 import sqlite3
 from datetime import datetime
 from parsers.txt_parser import TxtParser
+from utils.text_processor import TextProcessor, Paginator
 
 
 class Book:
@@ -9,6 +11,9 @@ class Book:
         self.db = db
         self.format = self._detect_format()
         self.parser = self._get_parser()
+
+        self.text_processor = None
+        self.paginator = None
 
         self.book_id = None
         self.title = None
@@ -42,6 +47,10 @@ class Book:
         self.title = parsed_data['title']
         self.author = parsed_data.get('author')
         self.footnotes = parsed_data.get('footnotes', {})
+
+        # Ініціалізуємо обробку тексту
+        self.text_processor = TextProcessor(self.content)
+        self.paginator = Paginator(self.content, self.text_processor)
 
         self._load_from_db()
 
@@ -81,19 +90,88 @@ class Book:
         conn.commit()
         conn.close()
 
-    def get_page(self, screen_height, screen_width):
+    def get_auto_page_size(self):
+        """Автоматично визначає розмір сторінки"""
+        try:
+            size = os.get_terminal_size()
+            lines = size.lines - 5  # Віднімаємо для меню
+            cols = size.columns - 2  # Віднімаємо для відступів
+            return lines * cols
+        except:
+            # Якщо не вдалося визначити - дефолтне значення
+            return 2000
+
+    def calculate_page_number(self, chars_per_page=None):
+        """
+        Розраховує поточний номер сторінки на основі позиції
+
+        Returns:
+            tuple: (current_page, total_pages)
+        """
+        if chars_per_page is None:
+            chars_per_page = self.get_auto_page_size()
+
+        # Рахуємо загальну кількість сторінок
+        total_chars = len(self.content)  # type: ignore
+        total_pages = (total_chars + chars_per_page - 1) // chars_per_page
+
+        # Рахуємо поточну сторінку
+        # Але! Треба врахувати що ми не розриваємо слова
+        # Тому робимо точний підрахунок
+        current_page = self._calculate_exact_page(chars_per_page)
+
+        return current_page, total_pages
+
+    def _calculate_exact_page(self, chars_per_page):
+        """
+        Точний підрахунок номера сторінки з урахуванням розривів слів
+        """
+        # Проходимо від початку до поточної позиції, рахуючи сторінки
+        position = 0
+        page_num = 1
+
+        while position < self.current_position:
+            page_data = self.paginator.get_page(position, chars_per_page)  # type: ignore
+
+            if page_data['next_position'] <= position:
+                # Захист від нескінченного циклу
+                break
+
+            if page_data['next_position'] > self.current_position:
+                # Ми на поточній сторінці
+                break
+
+            position = page_data['next_position']
+            page_num += 1
+
+        return page_num
+
+    def get_page(self, chars_per_page=None):
         """Повертає текст для поточного екрану"""
-        # TODO: складна логіка пагінації
-        pass
+        if chars_per_page is None:
+            chars_per_page = self.get_auto_page_size()
+        return self.paginator.get_page(self.current_position, chars_per_page)  # type: ignore
 
-    def next_page(self):
+    def next_page(self, chars_per_page=None):
         """Перехід на наступну сторінку"""
-        pass
+        if chars_per_page is None:
+            chars_per_page = self.get_auto_page_size()
+        page_data = self.get_page(chars_per_page)
+        if not page_data['is_last_page']:
+            self.current_position = page_data['next_position']
+            self.save_position()
+        return page_data
 
-    def prev_page(self):
+    def prev_page(self, chars_per_page=None):
         """Перехід на попередню сторінку"""
-        pass
+        if chars_per_page is None:
+            chars_per_page = self.get_auto_page_size()
+        new_position = max(0, self.current_position - chars_per_page)
+        self.current_position = new_position
+        self.save_position()
+        return self.get_page(chars_per_page)
 
     def add_bookmark(self, note=""):
         """Додає закладку на поточній позиції"""
         pass
+
