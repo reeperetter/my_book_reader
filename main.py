@@ -5,22 +5,22 @@ from core.book import Book
 def main():
     db = Database()
 
-    book = Book("test.txt", db)
+    # Тут можна змінити шлях до свого файлу
+    filepath = "test.txt"
+
+    book = Book(filepath, db)
     book.load()
 
     print(f"📖 {book.title}")
-    if book.text_processor.chapters:  # type: ignore
-        print(f"📑 Знайдено розділів: {len(book.text_processor.chapters)}") # type: ignore
+    if book.text_processor.chapters: #type: ignore
+        print(f"📑 Знайдено розділів: {len(book.text_processor.chapters)}") #type: ignore
 
     page_size = book.get_auto_page_size()
     print(f"📏 Розмір сторінки: {page_size} символів")
     print("="*50)
 
     while True:
-        # Отримуємо сторінку
         page = book.get_page()
-
-        # Розраховуємо номер сторінки
         current_page, total_pages = book.calculate_page_number()
 
         print(f"\n{'='*50}")
@@ -29,8 +29,12 @@ def main():
 
         print(page['text'])
 
+        # Перевіряємо чи це остання сторінка ПІСЛЯ показу
         if page['is_last_page']:
-            print("\n📖 Кінець книги!")
+            print("\n" + "="*50)
+            print("📖 Кінець книги!")
+            print("="*50)
+            input("\nНатисни Enter для виходу...")
             break
 
         print(f"\n{'─'*50}")

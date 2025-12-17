@@ -23,6 +23,11 @@ class Book:
         self.current_position = 0
         self.bookmarks = []
 
+        # Кеш для сторінок
+        self._page_cache = {}
+        self._total_pages_cache = None
+        self._cache_page_size = None
+
     def _detect_format(self):
         """Визначає формат файлу"""
         ext = self.filepath.lower().split('.')[-1]
@@ -101,6 +106,28 @@ class Book:
             # Якщо не вдалося визначити - дефолтне значення
             return 2000
 
+    def _calculate_total_pages(self, chars_per_page):
+        """
+        Розраховує загальну кількість сторінок з урахуванням розривів слів
+        """
+        position = 0
+        page_count = 0
+
+        while position < len(self.content): #type: ignore
+            page_data = self.paginator.get_page(position, chars_per_page) #type: ignore
+            page_count += 1
+
+            if page_data['is_last_page']:
+                break
+
+            if page_data['next_position'] <= position:
+                break
+
+            position = page_data['next_position']
+
+        return page_count
+
+
     def calculate_page_number(self, chars_per_page=None):
         """
         Розраховує поточний номер сторінки на основі позиції
@@ -111,34 +138,38 @@ class Book:
         if chars_per_page is None:
             chars_per_page = self.get_auto_page_size()
 
-        # Рахуємо загальну кількість сторінок
-        total_chars = len(self.content)  # type: ignore
-        total_pages = (total_chars + chars_per_page - 1) // chars_per_page
+        # Перевіряємо чи змінився розмір сторінки
+        if self._cache_page_size != chars_per_page:
+            # Скидаємо кеш
+            self._page_cache = {}
+            self._total_pages_cache = None
+            self._cache_page_size = chars_per_page
 
-        # Рахуємо поточну сторінку
-        # Але! Треба врахувати що ми не розриваємо слова
-        # Тому робимо точний підрахунок
         current_page = self._calculate_exact_page(chars_per_page)
 
-        return current_page, total_pages
+        # Використовуємо кешовану загальну кількість
+        if self._total_pages_cache is None:
+            self._total_pages_cache = self._calculate_total_pages(chars_per_page)
+
+        return current_page, self._total_pages_cache
 
     def _calculate_exact_page(self, chars_per_page):
         """
         Точний підрахунок номера сторінки з урахуванням розривів слів
         """
-        # Проходимо від початку до поточної позиції, рахуючи сторінки
+        if self.current_position == 0:
+            return 1
+
         position = 0
         page_num = 1
 
         while position < self.current_position:
-            page_data = self.paginator.get_page(position, chars_per_page)  # type: ignore
+            page_data = self.paginator.get_page(position, chars_per_page) # type: ignore
 
             if page_data['next_position'] <= position:
-                # Захист від нескінченного циклу
                 break
 
             if page_data['next_position'] > self.current_position:
-                # Ми на поточній сторінці
                 break
 
             position = page_data['next_position']
